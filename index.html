@@ -2,6 +2,8 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; connect-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action mailto:">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="SellerBill — 셀러용 정산·세금계산 메모. 채널별 매출·수수료·부가세를 묶어 월간 청구 요약을 만듭니다.">
   <meta name="theme-color" content="#0b1020">
@@ -118,37 +120,40 @@
 .ov-foot a{color:#7dd3fc;font-weight:700;text-decoration:none}
 .ov-foot .made{color:#e2e8f0;font-weight:700}
 
+button:disabled{opacity:.55;cursor:not-allowed} #tbody td:first-child{max-width:180px;overflow-wrap:anywhere} .panel{min-width:0} .table-scroll{overflow-x:auto} [aria-invalid="true"]{border-color:#fca5a5}
 </style>
 </head>
 <body>
 
 <div class="ov-bar">
-  <div><a class="ov-co" href="http://orvantro.com/">ORVANTRO</a> · <span>오르반트로</span></div>
+  <div><a class="ov-co" href="https://orvantro.com/">ORVANTRO</a> · <span>오르반트로</span></div>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span class="ov-beta">BETA · 결제/거래 불가</span>
-    <a href="http://orvantro.com/">공식 홈페이지</a>
+    <a href="https://orvantro.com/">공식 홈페이지</a>
   </div>
 </div>
 
   <div class="wrap">
     <header>
       <div>
-        <div class="brand">Seller<span>Bill</span></div>
-        <p class="tag">채널별 매출·수수료·부가세를 한곳에 모아 월간 정산·세금 요약을 만듭니다. 데이터는 이 브라우저에만 남습니다.</p>
+        <h1 class="brand">Seller<span>Bill</span></h1>
+        <p class="tag">채널별 매출·수수료·부가세를 한곳에 모아 월간 정산·세금 요약을 만듭니다. 입력한 정산 데이터는 이 화면에서만 처리하며, 새로고침하면 초기화됩니다.</p>
       </div>
-      <a class="studio" href="http://orvantro.com/" target="_blank" rel="noopener noreferrer">Made by ORVANTRO · 오르반트로</a>
+      <a class="studio" href="https://orvantro.com/" target="_blank" rel="noopener noreferrer">Made by ORVANTRO · 오르반트로</a>
     </header>
 
     <div class="layout">
       <section class="panel">
         <h2>채널 라인</h2>
         <div id="lines"></div>
+        <p id="calcError" class="note" role="status" aria-live="polite"></p>
         <div class="actions">
           <button type="button" class="btn-ghost" id="addLine">+ 라인 추가</button>
           <button type="button" class="btn-primary" id="recalc">다시 계산</button>
           <button type="button" class="btn-ghost" id="copySummary">요약 복사</button>
         </div>
-        <p class="note">공급가액 = 매출 ÷ 1.1, 부가세 = 매출 − 공급가액. 수수료는 매출(VAT 포함) 기준입니다.</p>
+        <p id="copyStatus" class="note" role="status" aria-live="polite"></p>
+        <p class="note">공급가액 = 매출 ÷ 1.1, 부가세 = 매출 − 공급가액. 수수료는 매출(VAT 포함) 기준입니다. 모든 매출에 10% 부가세가 포함되었다고 가정하며, 매입세액·기타 공제를 반영하지 않아 실제 납부세액과 다릅니다. 입력된 수수료율은 예시이며 실제 계약 요율로 수정해 주세요.</p>
       </section>
 
       <section class="panel">
@@ -159,7 +164,7 @@
           <div class="kpi"><div class="l">총 수수료</div><div class="v" id="totalFee">0원</div></div>
           <div class="kpi"><div class="l">매출 부가세</div><div class="v" id="vatOut">0원</div></div>
         </div>
-        <table>
+        <div class="table-scroll"><table>
           <thead>
             <tr>
               <th>채널</th>
@@ -169,7 +174,7 @@
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
-        </table>
+        </table></div>
         <textarea id="copyBox" readonly aria-label="복사 가능한 요약 텍스트"></textarea>
       </section>
     </div>
@@ -179,122 +184,12 @@
       <a href="https://judanvy8-netizen.github.io/feeroi/" target="_blank" rel="noopener noreferrer">Feeroi로 수수료 ROI 보기 →</a>
     </footer>
   </div>
-  <script>
-    const won = (n) => Math.round(n).toLocaleString('ko-KR') + '원';
-    const defaultLines = [
-      { channel: '스마트스토어', sales: 4200000, feePct: 3.3 },
-      { channel: '쿠팡', sales: 3100000, feePct: 5.8 },
-      { channel: '자사몰', sales: 980000, feePct: 0 },
-    ];
-    let lines = structuredClone(defaultLines);
-    const linesEl = document.getElementById('lines');
-
-    function renderInputs() {
-      linesEl.innerHTML = lines.map((line, i) => `
-        <div class="row" data-i="${i}">
-          <div>
-            <label>채널</label>
-            <input data-k="channel" value="${line.channel.replaceAll('"','&quot;')}">
-          </div>
-          <div>
-            <label>매출 (VAT 포함)</label>
-            <input data-k="sales" type="number" min="0" step="1000" value="${line.sales}">
-          </div>
-          <div>
-            <label>수수료율 (%)</label>
-            <input data-k="feePct" type="number" min="0" step="0.1" value="${line.feePct}">
-          </div>
-          <div>
-            <label>미리보기 순수령</label>
-            <input readonly value="${won(line.sales - line.sales * (line.feePct/100))}">
-          </div>
-          <div class="del">
-            <label>&nbsp;</label>
-            <button type="button" class="btn-danger" data-del="${i}">삭제</button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function readInputs() {
-      lines = [...linesEl.querySelectorAll('.row')].map((row) => {
-        const get = (k) => row.querySelector(`[data-k="${k}"]`).value;
-        return {
-          channel: get('channel') || '채널',
-          sales: Number(get('sales')) || 0,
-          feePct: Number(get('feePct')) || 0,
-        };
-      });
-    }
-
-    function calc() {
-      readInputs();
-      let totalSales = 0, totalFee = 0, vatOut = 0, net = 0;
-      const rows = lines.map((l) => {
-        const fee = l.sales * (l.feePct / 100);
-        const supply = l.sales / 1.1;
-        const vat = l.sales - supply;
-        const take = l.sales - fee;
-        totalSales += l.sales; totalFee += fee; vatOut += vat; net += take;
-        return { ...l, fee, take };
-      });
-      document.getElementById('totalSales').textContent = won(totalSales);
-      document.getElementById('totalFee').textContent = won(totalFee);
-      document.getElementById('vatOut').textContent = won(vatOut);
-      document.getElementById('net').textContent = won(net);
-      document.getElementById('tbody').innerHTML = rows.map((r) =>
-        `<tr><td>${r.channel}</td><td class="num">${won(r.sales)}</td><td class="num">${won(r.fee)}</td><td class="num">${won(r.take)}</td></tr>`
-      ).join('');
-      const text = [
-        '[SellerBill 월간 정산 요약]',
-        ...rows.map((r) => `- ${r.channel}: 매출 ${won(r.sales)} / 수수료 ${won(r.fee)} / 순수령 ${won(r.take)}`),
-        `합계 매출: ${won(totalSales)}`,
-        `합계 수수료: ${won(totalFee)}`,
-        `매출 부가세(추정): ${won(vatOut)}`,
-        `순수령 추정: ${won(net)}`,
-        '※ 세무 신고용 최종값이 아닙니다. 참고용 메모입니다.',
-      ].join('\n');
-      document.getElementById('copyBox').value = text;
-      renderInputs();
-    }
-
-    linesEl.addEventListener('change', calc);
-    linesEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-del]');
-      if (!btn) return;
-      readInputs();
-      lines.splice(Number(btn.dataset.del), 1);
-      if (!lines.length) lines = [{ channel: '채널', sales: 0, feePct: 0 }];
-      renderInputs();
-      calc();
-    });
-    document.getElementById('addLine').addEventListener('click', () => {
-      readInputs();
-      lines.push({ channel: '새 채널', sales: 0, feePct: 3.3 });
-      renderInputs();
-      calc();
-    });
-    document.getElementById('recalc').addEventListener('click', calc);
-    document.getElementById('copySummary').addEventListener('click', async () => {
-      calc();
-      const text = document.getElementById('copyBox').value;
-      try {
-        await navigator.clipboard.writeText(text);
-        document.getElementById('copySummary').textContent = '복사됨';
-        setTimeout(() => { document.getElementById('copySummary').textContent = '요약 복사'; }, 1200);
-      } catch (_) {
-        document.getElementById('copyBox').select();
-      }
-    });
-
-    renderInputs();
-    calc();
-  </script>
+  <script src="./calculator.js"></script>
 <div class="ov-wrap">
   <div class="ov-notice">
     <strong>이 버전은 ORVANTRO(오르반트로) 베타입니다.</strong>
     프리미엄 기능을 미리 볼 수 있지만 실제 결제·구독·거래는 아직 불가능합니다.
-    먼저 체험해 보신 뒤 아래 피드백을 남겨 주세요. 반영해 정식 출시에 반영합니다.
+    먼저 체험해 보신 뒤 아래 피드백을 남겨 주세요. 정식 출시 개선에 반영합니다.
   </div>
   <section class="ov-premium" aria-label="Premium 미리보기">
     <h3>Premium (미리보기 · 잠금)</h3>
@@ -309,7 +204,7 @@
   <section class="ov-feedback" id="feedback" aria-label="베타 피드백">
     <h3>베타 피드백</h3>
     <p class="lead">먼저 체험해 보시고, 불편한 점·필요한 기능을 알려 주세요. 메일 앱이 열립니다.</p>
-    <form onsubmit="return orvantroSubmitFeedback(this)">
+    <form>
       <div class="grid">
         <div>
           <label for="ov-product">제품</label>
@@ -328,11 +223,11 @@
         </div>
         <div>
           <label for="ov-email">회신 이메일 (선택)</label>
-          <input id="ov-email" name="email" type="email" placeholder="you@example.com">
+          <input id="ov-email" name="email" type="email" maxlength="254" placeholder="you@example.com">
         </div>
         <div class="full">
           <label for="ov-body">피드백 내용</label>
-          <textarea id="ov-body" name="body" required placeholder="예: 이런 입력값이 더 필요해요 / 결과 해석이 어려워요"></textarea>
+          <textarea id="ov-body" name="body" maxlength="2000" required placeholder="예: 이런 입력값이 더 필요해요 / 결과 해석이 어려워요"></textarea>
         </div>
       </div>
       <div class="actions">
@@ -343,24 +238,11 @@
   </section>
   <footer class="ov-foot">
     <span class="made">Made by ORVANTRO (오르반트로)</span>
-    <a href="http://orvantro.com/">공식 홈페이지로 돌아가기 →</a>
+    <a href="https://orvantro.com/">공식 홈페이지로 돌아가기 →</a>
   </footer>
 </div>
 
-<script>
-function orvantroSubmitFeedback(form){
-  const fd=new FormData(form);
-  const product=fd.get('product')||document.title||'ORVANTRO';
-  const rating=fd.get('rating')||'';
-  const email=fd.get('email')||'';
-  const body=fd.get('body')||'';
-  const subject=encodeURIComponent('[ORVANTRO 베타 피드백] '+product+' / '+rating);
-  const text=encodeURIComponent('제품: '+product+'\n만족도: '+rating+'\n회신 이메일: '+(email||'(없음)')+'\n\n피드백:\n'+body+'\n\n— '+location.href);
-  window.location.href='mailto:judanvy8@gmail.com?subject='+subject+'&body='+text;
-  return false;
-}
-</script>
-<script>window.ORVANTRO_ANALYTICS = { site: 'sellerbill' };</script>
+<script src="./feedback.js" defer></script>
 <script src="./orvantro-analytics.js" defer></script>
 </body>
 </html>
