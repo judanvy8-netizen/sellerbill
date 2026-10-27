@@ -11,5 +11,5 @@ document.querySelector('#feedback form').addEventListener('submit', (event) => {
   const body = String(data.get('body') || '').slice(0, 2000);
   const subject = encodeURIComponent('[ORVANTRO 베타 피드백] ' + product + ' / ' + rating);
   const message = encodeURIComponent(`제품: ${product}\n만족도: ${rating}\n회신 이메일: ${email}\n\n피드백:\n${body}\n\n— ${location.origin}${location.pathname}`);
-  window.location.href = 'mailto:judanvy8@gmail.com?subject=' + subject + '&body=' + message;
+  window.location.href = 'mailto:orvantro@gmail.com?subject=' + subject + '&body=' + message;
 });

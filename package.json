@@ -1,0 +1,7 @@
+{
+  "name": "sellerbill",
+  "private": true,
+  "scripts": {
+    "test": "node tests/redirect.cjs"
+  }
+}
